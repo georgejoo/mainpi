@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 
 
-
 def steering(averaged_lines):
     a1 = 0
     a2 = 0
