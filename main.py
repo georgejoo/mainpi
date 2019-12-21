@@ -1,5 +1,9 @@
 import cv2
 import numpy as np
+from picamera import PiCamera
+import time
+from picamera.array import PiRGBArray
+
 
 
 def steering(averaged_lines):
@@ -77,7 +81,7 @@ def canny(img):
     gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     kernel = 5
     blur = cv2.GaussianBlur(gray, (kernel, kernel), 0)
-    canny_met = cv2.Canny(blur, 90, 270)
+    canny_met = cv2.Canny(blur, 150, 450)
     return canny_met
 
 
@@ -98,39 +102,32 @@ def region_of_interest(canny_met):
     triangle = np.array([[
         (0, height),
         (width, height),
-        (width/2.3, height/1.6), ]], np.int32)
+        (width/2, height/2), ]], np.int32)
 
     cv2.fillPoly(mask, triangle, 255)
     masked_image = cv2.bitwise_and(canny_met, mask)
     return masked_image
 
 
-# image = cv2.imread('test_image.jpg')
-# lane_image = np.copy(image)
-# lane_canny = canny(lane_image)
-# cropped_canny = region_of_interest(lane_canny)
-# lines = cv2.HoughLinesP(cropped_canny, 2, np.pi/180, 100, np.array([]), minLineLength=40,maxLineGap=5)
-# averaged_lines = average_slope_intercept(image, lines)
-# line_image = display_lines(lane_image, averaged_lines)
-# combo_image = cv2.addWeighted(lane_image, 0.8, line_image, 1, 0)
-
-
-
-cap = cv2.VideoCapture('video_lap_home.avi')
-while cap.isOpened():
-    _, frame = cap.read()
+camera = PiCamera()
+camera.resolution = (320, 240)
+camera.framerate = 30
+rawCapture = PiRGBArray(camera, size=(320, 240))
+time.sleep(0.1)
+for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
+    frame = frame.array
     dim = (320, 240)
     frame = cv2.resize(frame, dim)
     canny_image = canny(frame)
-    cropped_canny = region_of_interest(canny_image)
-    lines = cv2.HoughLinesP(cropped_canny, 1, np.pi / 180, 10, np.array([]), minLineLength=10, maxLineGap=2)
+    #cropped_canny = region_of_interest(canny_image)
+    lines = cv2.HoughLinesP(canny_image, 1, np.pi / 180, 10, np.array([]), minLineLength=10, maxLineGap=2)
     averaged_lines = average_slope_intercept(frame, lines)
     line_angle = steering(averaged_lines)
     line_image = display_lines(frame, averaged_lines)
     combo_image = cv2.addWeighted(frame, 0.8, line_image, 1, 1)
     cv2.imshow("result", combo_image)
     print(len(averaged_lines), line_angle)
-    if cv2.waitKey(10) & 0xFF == ord('q'):
+    rawCapture.truncate(0)
+    if cv2.waitKey(50) & 0xFF == ord('q'):
         break
-cap.release()
 cv2.destroyAllWindows()
