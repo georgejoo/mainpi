@@ -1,9 +1,12 @@
 import cv2
 import numpy as np
+from picamera import PiCamera
+import time
+from picamera.array import PiRGBArray
 
-last_angle = 0
 
-def steering(averaged_lines, frame):
+
+def steering(averaged_lines):
     a1 = 0
     a2 = 0
     a = 0
@@ -88,7 +91,7 @@ def canny(img):
     gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     kernel = 5
     blur = cv2.GaussianBlur(gray, (kernel, kernel), 0)
-    canny_met = cv2.Canny(blur, 90, 270)
+    canny_met = cv2.Canny(blur, 150, 450)
     return canny_met
 
 
@@ -109,50 +112,20 @@ def region_of_interest(canny_met):
     triangle = np.array([[
         (0, height),
         (width, height),
-        (width/2.3, height/1.6), ]], np.int32)
+        (width/2, height/2), ]], np.int32)
 
     cv2.fillPoly(mask, triangle, 255)
     masked_image = cv2.bitwise_and(canny_met, mask)
     return masked_image
 
 
-
-def stabilize_steering_angle(
-        angle,
-        last_angle,
-        num_of_lane_lines):
-    """
-    Using last steering angle to stabilize the steering angle
-    if new angle is too different from current angle,
-    only turn by max_angle_deviation degrees
-    """
-    if num_of_lane_lines == 2:
-        # if both lane lines detected, then we can deviate more
-        max_angle_deviation = 5
-    else:
-        # if only one lane detected, don't deviate too much
-        max_angle_deviation = 1
-    angle_deviation = angle - last_angle
-    if abs(angle_deviation) > max_angle_deviation:
-        stabilized_angle = int((angle + max_angle_deviation*angle_deviation / abs(angle_deviation)))
-    else:
-        stabilized_angle = angle
-    return stabilized_angle
-
-# image = cv2.imread('test_image.jpg')
-# lane_image = np.copy(image)
-# lane_canny = canny(lane_image)
-# cropped_canny = region_of_interest(lane_canny)
-# lines = cv2.HoughLinesP(cropped_canny, 2, np.pi/180, 100, np.array([]), minLineLength=40,maxLineGap=5)
-# averaged_lines = average_slope_intercept(image, lines)
-# line_image = display_lines(lane_image, averaged_lines)
-# combo_image = cv2.addWeighted(lane_image, 0.8, line_image, 1, 0)
-
-
-
-cap = cv2.VideoCapture('video_lap_home.avi')
-while cap.isOpened():
-    _, frame = cap.read()
+camera = PiCamera()
+camera.resolution = (320, 240)
+camera.framerate = 30
+rawCapture = PiRGBArray(camera, size=(320, 240))
+time.sleep(0.1)
+for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
+    frame = frame.array
     dim = (320, 240)
     frame = cv2.resize(frame, dim)
     canny_image = canny(frame)
@@ -163,13 +136,9 @@ while cap.isOpened():
     stabilize_angle = stabilize_steering_angle(angle, last_angle, len(averaged_lines))
     line_image = display_lines(frame, averaged_lines)
     combo_image = cv2.addWeighted(frame, 0.8, line_image, 1, 1)
-    last_angle = angle
-    cv2.imshow("result", frame)
-    cv2.imshow("result0", canny_image)
-    cv2.imshow("result1", cropped_canny)
-    cv2.imshow("result2", combo_image)
-    print(averaged_lines, stabilize_angle, angle)
-    if cv2.waitKey(10) & 0xFF == ord('q'):
+    cv2.imshow("result", combo_image)
+    print(len(averaged_lines), line_angle)
+    rawCapture.truncate(0)
+    if cv2.waitKey(50) & 0xFF == ord('q'):
         break
-cap.release()
 cv2.destroyAllWindows()
