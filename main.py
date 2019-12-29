@@ -1,18 +1,29 @@
 import cv2
 import numpy as np
 
+last_angle = 0
 
-def steering(averaged_lines):
+def steering(averaged_lines, frame):
     a1 = 0
     a2 = 0
     a = 0
+    angle = 0
     if len(averaged_lines) == 2 and averaged_lines != 0:
         if (averaged_lines[1][0][0] - averaged_lines[1][0][2]) and (averaged_lines[0][0][0] - averaged_lines[0][0][2]) != 0:
             a1 = np.arctan((averaged_lines[1][0][3] - averaged_lines[1][0][1]) / (averaged_lines[1][0][2] - averaged_lines[1][0][0]))
             a2 = np.arctan((averaged_lines[0][0][1] - averaged_lines[0][0][3]) / (averaged_lines[0][0][0] - averaged_lines[0][0][2]))
             a = (a1 + a2) / 2
             a = int((360 / (2*np.pi)) * a)
-            return 90 + a
+            angle = 90 + a
+    if len(averaged_lines) == 1 and averaged_lines != 0:
+        x1 = averaged_lines[0][0][0]
+        x2 = averaged_lines[0][0][2]
+        x_offset = x2 - x1
+        y_offset = int(frame.shape[0] / 2)
+        a = np.arctan(x_offset / y_offset)
+        a = int((360 / (2*np.pi)) * a)
+        angle = 90 + a
+    return angle
 
 
 def make_points(image, line):
@@ -105,6 +116,29 @@ def region_of_interest(canny_met):
     return masked_image
 
 
+
+def stabilize_steering_angle(
+        angle,
+        last_angle,
+        num_of_lane_lines):
+    """
+    Using last steering angle to stabilize the steering angle
+    if new angle is too different from current angle,
+    only turn by max_angle_deviation degrees
+    """
+    if num_of_lane_lines == 2:
+        # if both lane lines detected, then we can deviate more
+        max_angle_deviation = 5
+    else:
+        # if only one lane detected, don't deviate too much
+        max_angle_deviation = 1
+    angle_deviation = angle - last_angle
+    if abs(angle_deviation) > max_angle_deviation:
+        stabilized_angle = int((angle + max_angle_deviation*angle_deviation / abs(angle_deviation)))
+    else:
+        stabilized_angle = angle
+    return stabilized_angle
+
 # image = cv2.imread('test_image.jpg')
 # lane_image = np.copy(image)
 # lane_canny = canny(lane_image)
@@ -125,11 +159,16 @@ while cap.isOpened():
     cropped_canny = region_of_interest(canny_image)
     lines = cv2.HoughLinesP(cropped_canny, 1, np.pi / 180, 10, np.array([]), minLineLength=10, maxLineGap=2)
     averaged_lines = average_slope_intercept(frame, lines)
-    line_angle = steering(averaged_lines)
+    angle = steering(averaged_lines, frame)
+    stabilize_angle = stabilize_steering_angle(angle, last_angle, len(averaged_lines))
     line_image = display_lines(frame, averaged_lines)
     combo_image = cv2.addWeighted(frame, 0.8, line_image, 1, 1)
-    cv2.imshow("result", combo_image)
-    print(len(averaged_lines), line_angle)
+    last_angle = angle
+    cv2.imshow("result", frame)
+    cv2.imshow("result0", canny_image)
+    cv2.imshow("result1", cropped_canny)
+    cv2.imshow("result2", combo_image)
+    print(averaged_lines, stabilize_angle, angle)
     if cv2.waitKey(10) & 0xFF == ord('q'):
         break
 cap.release()
