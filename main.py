@@ -3,6 +3,7 @@ import numpy as np
 from picamera import PiCamera
 import time
 from picamera.array import PiRGBArray
+import serial
 
 last_angle = 0
 
@@ -138,6 +139,7 @@ def stabilize_steering_angle(
         stabilized_angle = angle
     return stabilized_angle
 
+serial = serial.Serial("/dev/ttyS0", 9600)
 camera = PiCamera()
 camera.resolution = (320, 240)
 camera.framerate = 30
@@ -156,6 +158,7 @@ for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=
     line_image = display_lines(frame, averaged_lines)
     combo_image = cv2.addWeighted(frame, 0.8, line_image, 1, 1)
     last_angle = angle
+    serial.write(stabilize_angle)
     cv2.imshow("result", frame)
     cv2.imshow("result0", canny_image)
     cv2.imshow("result1", cropped_canny)
